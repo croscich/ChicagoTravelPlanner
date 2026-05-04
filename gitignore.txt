@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+
+# Enviornment -- keep private
+.env
+
+# Virtual environment
+.venv/
+
+rag_files/
+build_faiss_index.py
+query_function.py
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/
+
+# PyCharm
+.idea/
