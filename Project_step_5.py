@@ -1,18 +1,14 @@
 # agent logic
 import os
-#from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from Project_tools import get_chicago_weather, search_chicago_places, get_chicago_events
-
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 import streamlit as st
 
-# Load environment variables
-#load_dotenv()
-
 # load secrets from Streamlit Cloud if available
+# this must run before any OpenAI calls
 if "OPENAI_API_KEY" in st.secrets:
     os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 if "OPENWEATHER_API_KEY" in st.secrets:
@@ -21,14 +17,6 @@ if "GOOGLE_MAPS_API_KEY" in st.secrets:
     os.environ["GOOGLE_MAPS_API_KEY"] = st.secrets["GOOGLE_MAPS_API_KEY"]
 if "EVENTBRITE_API_KEY" in st.secrets:
     os.environ["EVENTBRITE_API_KEY"] = st.secrets["EVENTBRITE_API_KEY"]
-
-# Initialize model
-MODEL_LLM = "openai:gpt-4o-mini"
-MODEL = init_chat_model(MODEL_LLM, temperature=0.8)
-
-# RAG: load the FAISS index from disk
-embeddings = OpenAIEmbeddings(openai_api_key=os.environ.get("OPENAI_API_KEY"))
-vectorstore = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
 SYSTEM_PROMPT = """
 You are Marco, a travel planner specializing in Chicago trips.
@@ -78,11 +66,28 @@ Identity consistency:
 - Always speak as Marco, a Chicago travel planner.
 """
 
-agent = create_agent(
-    model=MODEL,
-    tools=[get_chicago_weather, search_chicago_places, get_chicago_events],
-    system_prompt=SYSTEM_PROMPT
-)
+
+# use st.cache_resource so the model and vectorstore are only created once
+# but AFTER secrets have been loaded above
+@st.cache_resource
+def load_agent_and_vectorstore():
+    api_key = os.environ.get("OPENAI_API_KEY")
+
+    MODEL = init_chat_model("openai:gpt-4o-mini", temperature=0.8)
+
+    embeddings = OpenAIEmbeddings(openai_api_key=api_key)
+    vectorstore = FAISS.load_local(
+        "faiss_index", embeddings, allow_dangerous_deserialization=True
+    )
+
+    agent = create_agent(
+        model=MODEL,
+        tools=[get_chicago_weather, search_chicago_places, get_chicago_events],
+        system_prompt=SYSTEM_PROMPT
+    )
+
+    return agent, vectorstore
+
 
 def initialize_messages():
     """
@@ -90,11 +95,16 @@ def initialize_messages():
     """
     return []
 
+
 def get_app_response(messages, user_input):
     """
     Takes the conversation history and user input,
     returns Marco's response and updated messages.
     """
+    # load agent and vectorstore — cached after first call
+    agent, vectorstore = load_agent_and_vectorstore()
+
+    # add the user prompt to the conversation history
     messages.append({"role": "user", "content": user_input})
 
     # RAG: retrieve relevant chunks and prepend them to the user prompt
@@ -102,14 +112,16 @@ def get_app_response(messages, user_input):
     context = "\n\n".join([doc.page_content for doc in docs])
     augmented_prompt = f"Use this context to help answer:\n\n{context}\n\nQuestion: {user_input}"
 
+    # print in PyCharm so we can see the augmented prompt and make sure things are working
     print(augmented_prompt)
 
-    messages.append({"role": "user", "content": user_input})
-
+    # make the LLM generate a result
     results = agent.invoke({"messages": messages + [augmented_prompt]})
 
+    # get the actual response from the LLM
     assistant_message = results["messages"][-1].content
 
+    # append the response to the conversation history
     messages.append({"role": "assistant", "content": assistant_message})
 
     return assistant_message, messages
