@@ -15,6 +15,12 @@ import streamlit as st
 # load secrets from Streamlit Cloud if available
 if "OPENAI_API_KEY" in st.secrets:
     os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+if "OPENWEATHER_API_KEY" in st.secrets:
+    os.environ["OPENWEATHER_API_KEY"] = st.secrets["OPENWEATHER_API_KEY"]
+if "GOOGLE_MAPS_API_KEY" in st.secrets:
+    os.environ["GOOGLE_MAPS_API_KEY"] = st.secrets["GOOGLE_MAPS_API_KEY"]
+if "EVENTBRITE_API_KEY" in st.secrets:
+    os.environ["EVENTBRITE_API_KEY"] = st.secrets["EVENTBRITE_API_KEY"]
 
 # Initialize model
 MODEL_LLM = "openai:gpt-4o-mini"
